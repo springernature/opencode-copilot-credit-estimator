@@ -218,7 +218,8 @@ def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
     con.execute(
         "CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)"
     )
-    con.execute("CREATE TABLE session (id TEXT, title TEXT)")
+    con.execute("CREATE TABLE session (id TEXT, title TEXT, project_id TEXT)")
+    con.execute("CREATE TABLE project (id TEXT, name TEXT, worktree TEXT)")
     con.execute(
         "CREATE TABLE session_message "
         "(id TEXT, session_id TEXT, type TEXT, time_created INTEGER, data TEXT)"
@@ -230,8 +231,10 @@ def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
     v2 = json.dumps(
         {"model": {"id": "m", "providerID": "github-copilot"}, "tokens": tokens}
     )
-    con.execute("INSERT INTO session VALUES ('s1', 'First session')")
-    con.execute("INSERT INTO session VALUES ('s2', 'Second session')")
+    con.execute("INSERT INTO project VALUES ('p1', 'Project One', '/work/one')")
+    con.execute("INSERT INTO project VALUES ('p2', NULL, '/work/two')")
+    con.execute("INSERT INTO session VALUES ('s1', 'First session', 'p1')")
+    con.execute("INSERT INTO session VALUES ('s2', 'Second session', 'p2')")
     con.execute("INSERT INTO message VALUES ('a', 's1', 100, ?)", (legacy(),))  # migrated
     con.execute("INSERT INTO message VALUES ('b', 's2', 200, ?)", (legacy(),))  # legacy only
     con.execute(
@@ -251,6 +254,9 @@ def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
     assert [r["session_title"] for r in rows] == [
         "First session", "Second session", "Second session"
     ]
+    assert [r["project_name"] for r in rows] == [
+        "Project One", "/work/two", "/work/two"
+    ]
 
 
 def test_summarize_by_session_groups_requests(monkeypatch):
@@ -262,6 +268,7 @@ def test_summarize_by_session_groups_requests(monkeypatch):
             "ts_ms": 200,
             "session_id": "session-a",
             "session_title": "First task",
+            "project_name": "Project A",
             "model": "test-model",
             "input": 1_000_000,
             "output": 100_000,
@@ -273,6 +280,7 @@ def test_summarize_by_session_groups_requests(monkeypatch):
             "ts_ms": 100,
             "session_id": "session-a",
             "session_title": "First task",
+            "project_name": "Project A",
             "model": "test-model",
             "input": 500_000,
             "output": 0,
@@ -284,6 +292,7 @@ def test_summarize_by_session_groups_requests(monkeypatch):
             "ts_ms": 300,
             "session_id": "session-b",
             "session_title": "Second task",
+            "project_name": "Project B",
             "model": "test-model",
             "input": 1_000_000,
             "output": 0,
@@ -298,6 +307,7 @@ def test_summarize_by_session_groups_requests(monkeypatch):
     assert [session_id for session_id, _ in sessions] == ["session-a", "session-b"]
     session = sessions[0][1]
     assert session["title"] == "First task"
+    assert session["project"] == "Project A"
     assert session["requests"] == 2
     assert session["input"] == 1_500_000
     assert session["output"] == 200_000
@@ -313,6 +323,7 @@ def test_output_sessions_shows_session_breakdown(monkeypatch, capsys):
             "session-a",
             {
                 "title": "A task",
+                "project": "Project A",
                 "requests": 2,
                 "input": 1_000,
                 "output": 500,
@@ -331,6 +342,7 @@ def test_output_sessions_shows_session_breakdown(monkeypatch, capsys):
 
     assert "estimate by session" in out
     assert "A task" in out
+    assert "Project A" in out
     assert "session-a" in out
     assert "125.0" in out
 
@@ -344,6 +356,7 @@ def test_output_sessions_json_includes_sessions(monkeypatch, capsys):
             "session-a",
             {
                 "title": "A task",
+                "project": "Project A",
                 "requests": 1,
                 "input": 10,
                 "output": 5,
@@ -362,6 +375,7 @@ def test_output_sessions_json_includes_sessions(monkeypatch, capsys):
 
     assert data["sessions"][0]["session_id"] == "session-a"
     assert data["sessions"][0]["title"] == "A task"
+    assert data["sessions"][0]["project"] == "Project A"
     assert data["sessions"][0]["credits"] == 1.0
 
 
