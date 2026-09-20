@@ -158,9 +158,13 @@ def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
 
     db = tmp_path / "opencode.db"
     con = sqlite3.connect(db)
-    con.execute("CREATE TABLE message (id TEXT, time_created INTEGER, data TEXT)")
     con.execute(
-        "CREATE TABLE session_message (id TEXT, type TEXT, time_created INTEGER, data TEXT)"
+        "CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)"
+    )
+    con.execute("CREATE TABLE session (id TEXT, title TEXT)")
+    con.execute(
+        "CREATE TABLE session_message "
+        "(id TEXT, session_id TEXT, type TEXT, time_created INTEGER, data TEXT)"
     )
     tokens = {"input": 1, "output": 2, "reasoning": 0, "cache": {"read": 3, "write": 4}}
     legacy = lambda: json.dumps(
@@ -169,14 +173,119 @@ def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
     v2 = json.dumps(
         {"model": {"id": "m", "providerID": "github-copilot"}, "tokens": tokens}
     )
-    con.execute("INSERT INTO message VALUES ('a', 100, ?)", (legacy(),))  # migrated
-    con.execute("INSERT INTO message VALUES ('b', 200, ?)", (legacy(),))  # legacy only
-    con.execute("INSERT INTO session_message VALUES ('a', 'assistant', 100, ?)", (v2,))
-    con.execute("INSERT INTO session_message VALUES ('c', 'assistant', 300, ?)", (v2,))
-    con.execute("INSERT INTO session_message VALUES ('d', 'user', 400, '{}')")
+    con.execute("INSERT INTO session VALUES ('s1', 'First session')")
+    con.execute("INSERT INTO session VALUES ('s2', 'Second session')")
+    con.execute("INSERT INTO message VALUES ('a', 's1', 100, ?)", (legacy(),))  # migrated
+    con.execute("INSERT INTO message VALUES ('b', 's2', 200, ?)", (legacy(),))  # legacy only
+    con.execute(
+        "INSERT INTO session_message VALUES ('a', 's1', 'assistant', 100, ?)", (v2,)
+    )
+    con.execute(
+        "INSERT INTO session_message VALUES ('c', 's2', 'assistant', 300, ?)", (v2,)
+    )
+    con.execute("INSERT INTO session_message VALUES ('d', 's2', 'user', 400, '{}')")
     con.commit()
     con.close()
 
     rows = estimator.fetch_rows(str(db), 0, 1000)
     assert [r["ts_ms"] for r in rows] == [100, 200, 300]
     assert all(r["model"] == "m" and r["cache_write"] == 4 for r in rows)
+    assert [r["session_id"] for r in rows] == ["s1", "s2", "s2"]
+    assert [r["session_title"] for r in rows] == [
+        "First session", "Second session", "Second session"
+    ]
+
+
+def test_summarize_by_session_groups_requests(monkeypatch):
+    monkeypatch.setattr(estimator, "PRICING", {
+        "test-model": (1.0, 0.5, None, 2.0),
+    })
+    rows = [
+        {
+            "ts_ms": 200,
+            "session_id": "session-a",
+            "session_title": "First task",
+            "model": "test-model",
+            "input": 1_000_000,
+            "output": 100_000,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+        },
+        {
+            "ts_ms": 100,
+            "session_id": "session-a",
+            "session_title": "First task",
+            "model": "test-model",
+            "input": 500_000,
+            "output": 0,
+            "reasoning": 100_000,
+            "cache_read": 0,
+            "cache_write": 0,
+        },
+        {
+            "ts_ms": 300,
+            "session_id": "session-b",
+            "session_title": "Second task",
+            "model": "test-model",
+            "input": 1_000_000,
+            "output": 0,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+        },
+    ]
+
+    sessions = estimator.summarize_by_session(rows)
+
+    assert [session_id for session_id, _ in sessions] == ["session-a", "session-b"]
+    session = sessions[0][1]
+    assert session["title"] == "First task"
+    assert session["requests"] == 2
+    assert session["input"] == 1_500_000
+    assert session["output"] == 200_000
+    assert session["first_ts_ms"] == 100
+    assert session["last_ts_ms"] == 200
+    assert session["usd"] == pytest.approx(1.9)
+
+
+def test_output_sessions_shows_session_breakdown(monkeypatch, capsys):
+    monkeypatch.setattr(estimator, "PRICING_META", {})
+    rows = [("session-a", {
+        "title": "A task", "requests": 2, "input": 1_000, "output": 500,
+        "cache_read": 0, "cache_write": 0, "first_ts_ms": 100,
+        "last_ts_ms": 200, "usd": 1.25, "priced": True,
+    })]
+
+    estimator.output_sessions_table(rows, 125.0, 50_000.0)
+    out = capsys.readouterr().out
+
+    assert "estimate by session" in out
+    assert "A task" in out
+    assert "session-a" in out
+    assert "125.0" in out
+
+
+def test_output_sessions_json_includes_sessions(monkeypatch, capsys):
+    import json
+
+    monkeypatch.setattr(estimator, "PRICING_META", {})
+    rows = [("session-a", {
+        "title": "A task", "requests": 1, "input": 10, "output": 5,
+        "cache_read": 0, "cache_write": 0, "first_ts_ms": 100,
+        "last_ts_ms": 100, "usd": 0.01, "priced": True,
+    })]
+
+    estimator.output_sessions_json(rows, 1.0, 50_000.0)
+    data = json.loads(capsys.readouterr().out)
+
+    assert data["sessions"][0]["session_id"] == "session-a"
+    assert data["sessions"][0]["title"] == "A task"
+    assert data["sessions"][0]["credits"] == 1.0
+
+
+def test_output_json_does_not_include_sessions(capsys):
+    import json
+
+    estimator.output_json([], 0.0, 50_000.0)
+    assert "sessions" not in json.loads(capsys.readouterr().out)
