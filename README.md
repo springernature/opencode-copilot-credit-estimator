@@ -50,6 +50,14 @@ occe
 # Set a custom monthly budget
 occe --budget 30000
 
+# Estimate a specific calendar month
+occe --month 2026-08 --output table
+
+# Estimate an ISO week, day, or local hour
+occe --week 2026-W38 --output table
+occe --day 2026-09-20 --output json
+occe --hour "2026-08-20 22" --output table
+
 # Point to a non-default database location
 occe --db /path/to/opencode.db
 
@@ -70,7 +78,51 @@ occe --output table
 
 # JSON (useful for scripting/piping)
 occe --output json
+
+# Per-session table
+occe --month 2026-08 --sessions
+
+# Per-session JSON
+occe --month 2026-08 --sessions --output json
+
+# Filter any TUI or report to one session
+occe --session ses_abc123 --month 2026-08
+occe --session ses_abc123 --output json
+
+# Show prompts from one session
+occe --session ses_abc123 --prompts
+occe --session ses_abc123 --prompts=long
+occe --session ses_abc123 --prompts=full --output json
 ```
+
+The `--sessions` flag groups the selected month's requests by OpenCode session
+and reports each session's title, request count, token totals, and estimated
+AI credits. Use `--output table` (the default) or `--output json` to select the
+rendering format.
+
+Use `--month YYYY-MM` to select a calendar month for the TUI, table, JSON, or
+session report. It defaults to the current month. In the TUI, the selected
+month applies to the **This month** tab; the other tabs continue to show their
+rolling/current time ranges.
+
+Use `--week` to select an ISO week (`2026-W38`, `2026W38`, or bare `38`, which
+uses the current year), `--day` to select an ISO date or the most recent day of
+month in the last 31 days, and `--hour` to select a local ISO date/hour
+(`2026-08-20T22` or `2026-08-20 22`) or the most recent matching hour in the
+last 24 hours. These selectors are mutually exclusive with `--month` and each
+other. In the TUI they select and open the corresponding Week, Today, or Last
+hour tab.
+
+Use `--session SESSION_ID` to limit the TUI or any non-interactive output to a
+single OpenCode session. This can be combined with `--month` to inspect that
+session's daily credit growth over a selected month, or with `--sessions` to
+produce a one-session breakdown.
+
+Use `--prompts` with `--session SESSION_ID` to print the user prompts from that
+session. The default `short` mode shows the first line up to 80 characters;
+`long` shows up to 300 characters of that line, and `full` shows the complete
+prompt. In table output, short prompts share a line with their usage data;
+long and full prompts are followed by their usage data on the next line.
 
 ### Remaining budget
 
@@ -94,11 +146,18 @@ occe --remaining
 | Flag | Default | Description |
 |---|---|---|
 | `--budget` | `50000` | Monthly AI credit budget to compare against |
+| `--month` | current month | Calendar month to estimate in `YYYY-MM` format |
+| `--week` | — | ISO week (`YYYY-Www`, `YYYYWww`, or bare week number) |
+| `--day` | — | ISO date or recent day-of-month number |
+| `--hour` | — | Local ISO date/hour or recent hour number |
 | `--db` | `~/.local/share/opencode/opencode.db` | Path to the opencode SQLite database |
 | `--interval` | `30` | Auto-refresh interval in seconds (TUI only) |
 | `--compact-width` | `80` | Terminal width (columns) below which compact mode activates |
 | `--compact-height` | `30` | Terminal height (rows) below which compact mode activates |
 | `--output` | — | Print monthly data as `table` or `json` and exit |
+| `--sessions` | off | Group non-interactive output by OpenCode session instead of model |
+| `--session` | — | Limit the TUI or non-interactive output to one OpenCode session ID |
+| `--prompts[=MODE]` | — | Print user prompts for `--session`; mode is `short`, `long`, or `full` |
 | `--remaining` | off | Print the number of AI credits left this month and exit (not combinable with `--output`) |
 | `--offline` | off | Skip network pricing refresh; use cached/bundled pricing only |
 
@@ -140,6 +199,8 @@ In regular mode, the full chart and complete nine-column model table (token coun
 |---|---|
 | `1` / `2` / `3` / `4` | Switch tab |
 | `r` | Refresh now |
+| `s` / `m` / `p` | Show session / model / prompt breakdown |
+| `f` / `b` | Move forward / backward through periods |
 | `q` | Quit |
 
 ## Pricing
@@ -162,4 +223,3 @@ Released under the [MIT License](LICENSE).
 ## Maintenance & support
 
 This project is maintained by Springer Nature on a best-effort basis. Bug reports and pull requests are welcome via [GitHub Issues](https://github.com/springernature/opencode-copilot-credit-estimator/issues). There is no guaranteed response time or SLA.
-

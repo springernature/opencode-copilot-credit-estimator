@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added the `occe` console script so the installed CLI is available when the project virtual environment is active.
+- Added `--sessions` to report estimated AI credit consumption grouped by OpenCode session. Use it with `--output table` or `--output json`.
+- Added `--month YYYY-MM` to estimate a specific calendar month in the TUI and all non-interactive output modes.
+- Added `--session SESSION_ID` to filter the TUI and non-interactive output to one OpenCode session.
+- Added `--prompts[=short|long|full]` to print user prompts and their usage data for a selected session.
+- Long and full prompt output now places credits on a separate indented line for easier scanning.
+- Added `--week`, `--day`, and `--hour` selectors for ISO and recent bare-number time ranges in the TUI, table, JSON, session, and prompt output modes.
+- Selected week, day, and hour ranges now replace the corresponding TUI tab label with the exact selected period.
+- TUI tabs now derive their selected hour, day, week, and month from any supplied time selector.
+- Added TUI navigation and live refresh controls for browsing selected time ranges.
+- Added `S`/`M` TUI bindings to switch between session and model breakdowns.
+- Added the `P` TUI binding for a prompt breakdown with timestamps, projects, prompt content, and usage data.
+- Fixed the TUI session table to use remaining width for session names.
+- Fixed long TUI session names being truncated before the flexible column could display them.
+
+### Fixed
+
+- Fixed the Today chart timeline to start at local midnight and use local-time labels.
+- Fixed the week chart to label every weekday in local time.
+- Fixed the month chart to use local-month boundaries and local-date buckets.
+- Fixed month chart points to align cumulative usage with their displayed day labels.
+- Fixed the current-month chart to include today’s local-midnight bucket.
+
 ## [0.4.0] - 2026-09-17
 
 ### Added
