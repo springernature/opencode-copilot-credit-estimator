@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Read usage from opencode's newer `session_message` table (v2 schema), falling back to the legacy `message` table for rows not present there. Previously, usage recorded after opencode switched schemas was silently ignored and totals were heavily undercounted.
+
 ## [0.4.0] - 2026-09-17
 
 ### Added

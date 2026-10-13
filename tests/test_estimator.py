@@ -150,3 +150,33 @@ def test_output_json_remaining_with_zero_budget(capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["remaining_credits"] == -10.0
     assert data["pct_remaining"] is None
+
+
+def test_fetch_rows_reads_v2_and_legacy_without_duplicates(tmp_path):
+    import json
+    import sqlite3
+
+    db = tmp_path / "opencode.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE message (id TEXT, time_created INTEGER, data TEXT)")
+    con.execute(
+        "CREATE TABLE session_message (id TEXT, type TEXT, time_created INTEGER, data TEXT)"
+    )
+    tokens = {"input": 1, "output": 2, "reasoning": 0, "cache": {"read": 3, "write": 4}}
+    legacy = lambda: json.dumps(
+        {"role": "assistant", "providerID": "github-copilot", "modelID": "m", "tokens": tokens}
+    )
+    v2 = json.dumps(
+        {"model": {"id": "m", "providerID": "github-copilot"}, "tokens": tokens}
+    )
+    con.execute("INSERT INTO message VALUES ('a', 100, ?)", (legacy(),))  # migrated
+    con.execute("INSERT INTO message VALUES ('b', 200, ?)", (legacy(),))  # legacy only
+    con.execute("INSERT INTO session_message VALUES ('a', 'assistant', 100, ?)", (v2,))
+    con.execute("INSERT INTO session_message VALUES ('c', 'assistant', 300, ?)", (v2,))
+    con.execute("INSERT INTO session_message VALUES ('d', 'user', 400, '{}')")
+    con.commit()
+    con.close()
+
+    rows = estimator.fetch_rows(str(db), 0, 1000)
+    assert [r["ts_ms"] for r in rows] == [100, 200, 300]
+    assert all(r["model"] == "m" and r["cache_write"] == 4 for r in rows)

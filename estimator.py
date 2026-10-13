@@ -87,23 +87,62 @@ def fetch_rows(db_path: str, start_ms: int, end_ms: int) -> list[dict]:
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
+    tables = {
+        r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    has_v2 = "session_message" in tables
+    has_legacy = "message" in tables
+
+    # Newer opencode versions write to session_message (model under $.model);
+    # the legacy message table (model under $.modelID) was migrated into it, so
+    # only include legacy rows that are missing from session_message.
+    selects = []
+    if has_v2:
+        selects.append(
+            """
+            SELECT
+                time_created AS ts_ms,
+                json_extract(data, '$.model.id')            AS model,
+                COALESCE(json_extract(data, '$.tokens.input'),       0) AS input,
+                COALESCE(json_extract(data, '$.tokens.output'),      0) AS output,
+                COALESCE(json_extract(data, '$.tokens.reasoning'),   0) AS reasoning,
+                COALESCE(json_extract(data, '$.tokens.cache.read'),  0) AS cache_read,
+                COALESCE(json_extract(data, '$.tokens.cache.write'), 0) AS cache_write
+            FROM session_message
+            WHERE type = 'assistant'
+              AND json_extract(data, '$.model.providerID') = 'github-copilot'
+              AND time_created >= :start AND time_created < :end
+            """
+        )
+    if has_legacy:
+        dedupe = (
+            "AND NOT EXISTS (SELECT 1 FROM session_message s WHERE s.id = message.id)"
+            if has_v2
+            else ""
+        )
+        selects.append(
+            f"""
+            SELECT
+                time_created AS ts_ms,
+                json_extract(data, '$.modelID')            AS model,
+                COALESCE(json_extract(data, '$.tokens.input'),       0) AS input,
+                COALESCE(json_extract(data, '$.tokens.output'),      0) AS output,
+                COALESCE(json_extract(data, '$.tokens.reasoning'),   0) AS reasoning,
+                COALESCE(json_extract(data, '$.tokens.cache.read'),  0) AS cache_read,
+                COALESCE(json_extract(data, '$.tokens.cache.write'), 0) AS cache_write
+            FROM message
+            WHERE json_extract(data, '$.role')       = 'assistant'
+              AND json_extract(data, '$.providerID') = 'github-copilot'
+              AND time_created >= :start AND time_created < :end
+              {dedupe}
+            """
+        )
+    if not selects:
+        con.close()
+        return []
     cur.execute(
-        """
-        SELECT
-            time_created AS ts_ms,
-            json_extract(data, '$.modelID')            AS model,
-            COALESCE(json_extract(data, '$.tokens.input'),       0) AS input,
-            COALESCE(json_extract(data, '$.tokens.output'),      0) AS output,
-            COALESCE(json_extract(data, '$.tokens.reasoning'),   0) AS reasoning,
-            COALESCE(json_extract(data, '$.tokens.cache.read'),  0) AS cache_read,
-            COALESCE(json_extract(data, '$.tokens.cache.write'), 0) AS cache_write
-        FROM message
-        WHERE json_extract(data, '$.role')       = 'assistant'
-          AND json_extract(data, '$.providerID') = 'github-copilot'
-          AND time_created >= ? AND time_created < ?
-        ORDER BY time_created
-        """,
-        (start_ms, end_ms),
+        " UNION ALL ".join(selects) + " ORDER BY ts_ms",
+        {"start": start_ms, "end": end_ms},
     )
     rows = [dict(r) for r in cur.fetchall()]
     con.close()
