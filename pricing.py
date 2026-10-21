@@ -34,6 +34,7 @@ import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from importlib.resources import files
 
 GITHUB_PRICING_URL = (
     "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
@@ -42,8 +43,10 @@ GITHUB_PRICING_URL = (
 CACHE_DIR = os.path.expanduser("~/.cache/opencode-copilot-credit-estimator")
 CACHE_PATH = os.path.join(CACHE_DIR, "github-copilot-pricing.json")
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-BUNDLED_SNAPSHOT_PATH = os.path.join(_HERE, "resources", "github-copilot-pricing-snapshot.json")
+_RESOURCE_PACKAGE = f"{__package__}.resources" if __package__ else "resources"
+BUNDLED_SNAPSHOT_PATH = str(
+    files(_RESOURCE_PACKAGE).joinpath("github-copilot-pricing-snapshot.json")
+)
 
 STALE_AFTER_SECONDS = 24 * 60 * 60  # 1 day
 DEFAULT_TIMEOUT = 10  # seconds

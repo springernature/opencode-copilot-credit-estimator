@@ -138,6 +138,22 @@ def test_load_pricing_without_refresh_uses_bundled_snapshot_when_no_cache(tmp_pa
     assert meta["source"] == pricing.GITHUB_PRICING_URL
 
 
+def test_occe_package_loads_bundled_pricing_resource(tmp_path):
+    from importlib.resources import files
+
+    from occe import pricing as packaged_pricing
+
+    table, _ = packaged_pricing.load_pricing(
+        refresh=False,
+        cache_path=str(tmp_path / "missing-cache.json"),
+    )
+
+    assert table
+    assert files("occe.resources").joinpath(
+        "github-copilot-pricing-snapshot.json"
+    ).is_file()
+
+
 def test_load_pricing_refresh_false_never_touches_network(tmp_path, monkeypatch):
     def _boom(*args, **kwargs):
         raise AssertionError("network should not be called when refresh=False")
