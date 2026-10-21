@@ -1038,7 +1038,8 @@ class CreditEstimatorApp(App):
 
     def on_mount(self) -> None:
         self._update_compact(self.size.width, self.size.height)
-        self.refresh_data()
+        # Let the composed screen finish mounting before querying child widgets.
+        self.call_after_refresh(self.refresh_data)
         self.set_interval(self.interval, self.refresh_data)
         if not self.offline:
             self.run_worker(self._refresh_pricing, thread=True, exclusive=True)
