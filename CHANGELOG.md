@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added TUI navigation and live refresh controls for browsing selected time ranges.
 - Added `S`/`M` TUI bindings to switch between session and model breakdowns.
 - Added the `P` TUI binding for a prompt breakdown with timestamps, projects, prompt content, and usage data.
+- Packaged the CLI modules and bundled pricing snapshot under `occe`, avoiding generic top-level imports while preserving offline fallback pricing.
 
 ### Fixed
 

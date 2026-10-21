@@ -39,7 +39,10 @@ from textual.reactive import reactive
 from textual.widgets import DataTable, Footer, Header, Label, Tab, Tabs
 from textual_plotext import PlotextPlot
 
-import pricing as pricing_source
+if __package__:
+    from . import pricing as pricing_source
+else:
+    import pricing as pricing_source
 
 # ---------------------------------------------------------------------------
 # Pricing

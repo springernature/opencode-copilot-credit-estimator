@@ -11,14 +11,18 @@ dependencies = [
 ]
 
 [project.scripts]
-occe = "estimator:main"
+occe = "occe.estimator:main"
 
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["estimator", "pricing"]
+packages = ["occe", "occe.resources"]
+package-dir = { occe = ".", "occe.resources" = "resources" }
+
+[tool.setuptools.package-data]
+"occe.resources" = ["github-copilot-pricing-snapshot.json"]
 
 [tool.uv]
 package = true
