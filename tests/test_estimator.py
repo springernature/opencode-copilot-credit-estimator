@@ -476,13 +476,29 @@ async def test_model_table_switches_between_model_and_session_views():
         assert tuple(str(column.label) for column in table.columns.values()) == ModelTable.SESSION_COLUMNS
         assert table.get_cell_at((0, 1)) == "A session title that is longer than the model name limit and should use the available width"
         await pilot.pause()
-        assert table.columns["Session"].get_render_width(table) == table.content_region.width - sum(
-            column.get_render_width(table)
-            for key, column in table.columns.items()
-            if key != "Session"
-        )
-        table.show_models()
-        assert tuple(str(column.label) for column in table.columns.values()) == ModelTable.FULL_COLUMNS
+        for _ in range(3):
+            assert table.columns["Session"].get_render_width(table) == table.content_region.width - sum(
+                column.get_render_width(table)
+                for key, column in table.columns.items()
+                if key != "Session"
+            )
+            table.show_models()
+            assert tuple(str(column.label) for column in table.columns.values()) == ModelTable.FULL_COLUMNS
+            table.show_sessions([(
+                "session-a",
+                {
+                    "project": "Project A",
+                    "title": "A session title that is longer than the model name limit and should use the available width",
+                    "requests": 1,
+                    "input": 10,
+                    "output": 5,
+                    "cache_read": 0,
+                    "cache_write": 0,
+                    "usd": 0.01,
+                    "priced": True,
+                },
+            )])
+            await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -524,6 +540,60 @@ async def test_model_table_shows_prompts_with_initial_content():
             for key, column in table.columns.items()
             if key != "Prompt"
         )
+
+
+@pytest.mark.asyncio
+async def test_table_renders_full_columns_immediately_after_range_switch(monkeypatch):
+    """The first frame after a tab switch must not use stale narrow columns.
+
+    DataTable caches rendered lines, so columns measured after the first draw
+    used to stay one character wide until the next data refresh.
+    """
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    monkeypatch.setattr(estimator, "fetch_rows", lambda *_: [{
+        "ts_ms": now_ms,
+        "session_id": "session-a",
+        "session_title": "A session title",
+        "project_name": "Project",
+        "model": "a-model-name",
+        "input": 5,
+        "output": 5,
+        "reasoning": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+    }])
+    monkeypatch.setattr(estimator, "fetch_prompts", lambda *_: [{
+        "ts_ms": now_ms,
+        "session_id": "session-a",
+        "session_title": "A session title",
+        "project_name": "Project",
+        "prompt": "A reasonably long prompt text",
+        "requests": 1,
+        "input": 1,
+        "output": 1,
+        "cache_read": 0,
+        "cache_write": 0,
+        "credits": 1.0,
+    }])
+    app = CreditEstimatorApp(
+        db="/nonexistent/opencode.db", budget=50_000, interval=3600, offline=True
+    )
+
+    def first_row(table):
+        return "".join(segment.text for segment in table.render_line(1))
+
+    async with app.run_test(size=(160, 50)) as pilot:
+        table = app.query_one("#table", ModelTable)
+        await pilot.pause()
+        for key, expected in (
+            ("p", "A reasonably long prompt text"),
+            ("s", "A session title"),
+            ("m", "a-model-name"),
+        ):
+            await pilot.press(key)
+            await pilot.press("left")  # change the time range, no pause
+            assert expected in first_row(table), (key, first_row(table))
+            await pilot.press("right")
 
 
 def test_navigation_moves_all_ranges_from_active_day():

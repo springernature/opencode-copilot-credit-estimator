@@ -738,6 +738,7 @@ class ModelTable(DataTable):
         self._view = "models"
         self._session_rows: list[tuple[str, dict]] = []
         self._prompt_rows: list[dict] = []
+        self._width_signature: tuple[int, ...] = ()
 
     def on_mount(self) -> None:
         self._rebuild_columns()
@@ -757,6 +758,31 @@ class ModelTable(DataTable):
                 sum(column.get_render_width(self) for column in self.columns.values()),
                 self.virtual_size.height,
             )
+        self._invalidate_if_widths_changed()
+
+    def _invalidate_if_widths_changed(self) -> None:
+        """Drop cached lines that were drawn with out-of-date column widths.
+
+        Column widths are measured (and the flexible column sized) after rows
+        are added.  DataTable caches rendered lines, so anything drawn with the
+        earlier, narrower widths would otherwise stay on screen until the next
+        full clear, i.e. the next data refresh.
+        """
+        signature = tuple(column.get_render_width(self) for column in self.columns.values())
+        if signature != self._width_signature:
+            self._width_signature = signature
+            self._clear_caches()
+            self._update_count += 1
+            self.refresh()
+
+    def _measure_now(self) -> None:
+        """Measure freshly added rows immediately instead of on the next idle."""
+        if not self._require_update_dimensions:
+            return
+        new_rows = self._new_rows.copy()
+        self._new_rows.clear()
+        self._require_update_dimensions = False
+        self._update_dimensions(new_rows)
 
     def _rebuild_columns(self) -> None:
         self.clear(columns=True)
@@ -781,7 +807,6 @@ class ModelTable(DataTable):
             elif self._view == "sessions" and col == "Session":
                 width = 1
             self.add_column(col, key=col, width=width)
-        self.call_after_refresh(self._fit_flexible_column)
 
     def _fit_prompt_column(self) -> None:
         self._fit_flexible_column()
@@ -801,6 +826,7 @@ class ModelTable(DataTable):
         self.columns[flexible_name].width = max(
             1, available_width - other_width - prompt_padding
         )
+        self._invalidate_if_widths_changed()
 
     def set_compact(self, compact: bool) -> None:
         """Switch column schema. No-op if already in the requested mode."""
@@ -848,36 +874,39 @@ class ModelTable(DataTable):
         self.clear()
         if self._view == "sessions":
             self._render_session_rows()
-            return
-        if self._view == "prompts":
+        elif self._view == "prompts":
             self._render_prompt_rows()
-            return
-        for model, m in self._model_rows:
-            cred_val = credits(m["usd"])
-            cred = f"{cred_val:,.1f}" if m["priced"] else "?"
-            pct_used = (
-                f"{cred_val / self._total_credits * 100:.1f}%"
-                if (m["priced"] and self._total_credits) else "?"
-            )
-            pct_budget = (
-                f"{cred_val / self._budget * 100:.2f}%"
-                if (m["priced"] and self._budget) else "?"
-            )
-            name = self._truncate(model)
-            if self._compact:
-                self.add_row(name, f"{m['requests']:,}", pct_budget)
-            else:
-                self.add_row(
-                    name,
-                    f"{m['requests']:,}",
-                    f"{m['input']:,}",
-                    f"{m['output']:,}",
-                    f"{m['cache_read']:,}",
-                    f"{m['cache_write']:,}",
-                    cred,
-                    pct_used,
-                    pct_budget,
+        else:
+            for model, m in self._model_rows:
+                cred_val = credits(m["usd"])
+                cred = f"{cred_val:,.1f}" if m["priced"] else "?"
+                pct_used = (
+                    f"{cred_val / self._total_credits * 100:.1f}%"
+                    if (m["priced"] and self._total_credits) else "?"
                 )
+                pct_budget = (
+                    f"{cred_val / self._budget * 100:.2f}%"
+                    if (m["priced"] and self._budget) else "?"
+                )
+                name = self._truncate(model)
+                if self._compact:
+                    self.add_row(name, f"{m['requests']:,}", pct_budget)
+                else:
+                    self.add_row(
+                        name,
+                        f"{m['requests']:,}",
+                        f"{m['input']:,}",
+                        f"{m['output']:,}",
+                        f"{m['cache_read']:,}",
+                        f"{m['cache_write']:,}",
+                        cred,
+                        pct_used,
+                        pct_budget,
+                    )
+        # Measure and size now so the first frame already has final widths.
+        self._measure_now()
+        if self._view in ("sessions", "prompts"):
+            self.call_after_refresh(self._fit_flexible_column)
 
     def _render_session_rows(self) -> None:
         for session_id, session in self._session_rows:

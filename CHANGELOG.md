@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fixed month chart points to align cumulative usage with their displayed day labels.
 - Fixed the current-month chart to include today's local-midnight bucket.
 - Fixed an intermittent TUI startup failure by refreshing data after the screen finishes mounting.
+- Fixed the TUI table briefly showing one-character-wide columns after switching time ranges until the next refresh.
 
 ## [0.4.1] - 2026-10-13
 
