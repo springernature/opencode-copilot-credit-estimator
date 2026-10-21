@@ -459,14 +459,20 @@ def build_series(
     if not rows:
         return [], []
 
-    local_tz = datetime.now().astimezone().tzinfo
-    now = datetime.now(timezone.utc)
-    now_local = now.astimezone(local_tz)
+    # Selected ranges carry the timezone in which their calendar boundaries
+    # were created. Keep chart buckets in that timezone rather than silently
+    # converting them to the current timezone.
+    local_tz = (
+        time_range.start.tzinfo if time_range
+        else datetime.now().astimezone().tzinfo
+    )
+    now_local = datetime.now(local_tz)
+    now_utc = now_local.astimezone(timezone.utc)
 
     if range_key == "hour":
         # Per-minute buckets over the last 60 minutes
         start = (time_range.start.astimezone(timezone.utc) if time_range
-                 else now - timedelta(hours=1))
+                 else now_utc - timedelta(hours=1))
         start_local = start.astimezone(local_tz)
         n_buckets = 60
         def bucket_fn(ts_ms):
@@ -478,39 +484,47 @@ def build_series(
     elif range_key == "today":
         # Hourly buckets from midnight to now
         start = (time_range.start.astimezone(local_tz) if time_range
-                 else now.astimezone(local_tz).replace(
+                 else now_local.replace(
                      hour=0, minute=0, second=0, microsecond=0))
-        end = time_range.end.astimezone(local_tz) if time_range else now.astimezone(local_tz)
-        n_buckets = max(int((end - start).total_seconds() / 3600) + 1, 1)
+        end = time_range.end.astimezone(local_tz) if time_range else now_local
+        elapsed = (
+            end.astimezone(timezone.utc) - start.astimezone(timezone.utc)
+        ).total_seconds()
+        n_buckets = max(math.ceil(elapsed / 3600), 1)
         def bucket_fn(ts_ms):
-            dt = datetime.fromtimestamp(ts_ms / 1000, tz=local_tz)
-            return int((dt - start).total_seconds() / 3600)
+            dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+            return int((dt - start.astimezone(timezone.utc)).total_seconds() / 3600)
         def label_fn(i):
-            return (start + timedelta(hours=i)).strftime("%H:%M")
+            dt = start.astimezone(timezone.utc) + timedelta(hours=i)
+            return dt.astimezone(local_tz).strftime("%H:%M")
     elif range_key == "week":
         # Hourly buckets from Monday 00:00 to now
         start = (time_range.start.astimezone(local_tz) if time_range else
-                 now.astimezone(local_tz).replace(
+                 now_local.replace(
                      hour=0, minute=0, second=0, microsecond=0) -
-                 timedelta(days=now.astimezone(local_tz).weekday()))
-        end = time_range.end.astimezone(local_tz) if time_range else now.astimezone(local_tz)
-        n_buckets = max(math.ceil((end - start).total_seconds() / 3600), 1)
+                 timedelta(days=now_local.weekday()))
+        end = time_range.end.astimezone(local_tz) if time_range else now_local
+        elapsed = (
+            end.astimezone(timezone.utc) - start.astimezone(timezone.utc)
+        ).total_seconds()
+        n_buckets = max(math.ceil(elapsed / 3600), 1)
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         def bucket_fn(ts_ms):
-            dt = datetime.fromtimestamp(ts_ms / 1000, tz=local_tz)
-            return int((dt - start).total_seconds() / 3600)
+            dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+            return int((dt - start.astimezone(timezone.utc)).total_seconds() / 3600)
         def label_fn(i):
-            dt = start + timedelta(hours=i)
+            dt = (start.astimezone(timezone.utc) + timedelta(hours=i)).astimezone(local_tz)
             if dt.hour == 0:
                 return day_names[dt.weekday()]
             return ""
     else:  # month
         # Daily buckets from the first through the last selected month day.
-        start, month_end = month_bounds(month)
         if time_range:
             start = time_range.start.astimezone(local_tz)
             month_end = time_range.end.astimezone(local_tz)
-        end = min(month_end, now.astimezone(local_tz))
+        else:
+            start, month_end = month_bounds(month)
+        end = min(month_end, now_local)
         n_buckets = (end.date() - start.date()).days
         if end.time() != datetime.min.time():
             n_buckets += 1

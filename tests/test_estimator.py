@@ -313,6 +313,33 @@ def test_august_month_and_day_series_use_the_same_local_day(monkeypatch):
     assert day23_values[-1] == 0.0
 
 
+def test_series_uses_selected_timezone_not_host_timezone(monkeypatch):
+    selected_tz = timezone(timedelta(hours=9))
+    now = datetime(2026, 9, 20, 5, 30, tzinfo=selected_tz)
+    period = estimator.TimeRange(
+        datetime(2026, 9, 20, 0, 0, tzinfo=selected_tz), now, "2026-09-20"
+    )
+    monkeypatch.setattr(
+        estimator, "PRICING", {"test-model": (1.0, 0.0, None, 1.0)}
+    )
+    rows = [{
+        "ts_ms": int(datetime(2026, 9, 20, 3, 15, tzinfo=selected_tz).timestamp() * 1000),
+        "model": "test-model",
+        "input": 1_000_000,
+        "output": 0,
+        "reasoning": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+    }]
+
+    labels, values = estimator.build_series(rows, "today", time_range=period)
+
+    assert labels[0] == "00:00"
+    assert labels[3] == "03:00"
+    assert values[2] == 0.0
+    assert values[3] == 100.0
+
+
 def test_output_json_reports_selected_month(capsys):
     import json
 
