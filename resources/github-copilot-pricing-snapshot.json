@@ -12,6 +12,12 @@
       12.5,
       50.0
     ],
+    "claude-fable-5.2": [
+      8.0,
+      0.2,
+      10.0,
+      40.0
+    ],
     "claude-haiku-4.5": [
       1.0,
       0.1,
@@ -72,23 +78,17 @@
       2.5,
       10.0
     ],
-    "gemini-3.7-flash": [
-      0.75,
-      0.075,
-      null,
-      3.75
-    ],
     "gemini-3.8-flash": [
       0.75,
       0.075,
       null,
       3.75
     ],
-    "gpt-5-mini": [
-      0.25,
-      0.025,
+    "gemini-4-argon": [
+      2.0,
+      0.1,
       null,
-      2.0
+      10.0
     ],
     "gpt-5.3-codex": [
       1.75,
@@ -96,29 +96,11 @@
       null,
       14.0
     ],
-    "gpt-5.4": [
-      2.5,
-      0.25,
-      null,
-      15.0
-    ],
-    "gpt-5.4-mini": [
-      0.75,
-      0.075,
-      null,
-      4.5
-    ],
     "gpt-5.4-nano": [
       0.2,
       0.02,
       null,
       1.25
-    ],
-    "gpt-5.5": [
-      5.0,
-      0.5,
-      null,
-      30.0
     ],
     "gpt-5.6-luna": [
       0.2,
@@ -162,6 +144,12 @@
       2.5,
       10.0
     ],
+    "gpt-6.1-terra": [
+      1.0,
+      0.05,
+      1.25,
+      5.0
+    ],
     "grok-4.5": [
       2.0,
       0.5,
@@ -193,6 +181,6 @@
       1.2
     ]
   },
-  "retrievedAt": "2026-10-13T16:54:24Z",
+  "retrievedAt": "2026-11-10T14:20:04Z",
   "source": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
 }

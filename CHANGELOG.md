@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-10
+
 ### Changed
 
 - The cumulative credit chart now uses a theme-matched Braille line, subtle horizontal gridlines, compact axis labels, a zero baseline, and a shorter title. Time labels adapt to terminal width and preserve sparse hour/day labels.
+- Refreshed the bundled pricing snapshot from GitHub's published model pricing.
 
 ## [0.4.1] - 2026-10-13
 
