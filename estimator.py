@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import calendar
+import math
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from itertools import accumulate
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.color import Color
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import DataTable, Footer, Header, Label, Tab, Tabs
@@ -305,8 +307,6 @@ class CreditChart(PlotextPlot):
         self._labels: list[str] = []
         self._values: list[float] = []
         self._range_label: str = ""
-        self._total: float = 0.0
-        self._budget: float = DEFAULT_BUDGET
 
     def update_data(
         self,
@@ -318,34 +318,71 @@ class CreditChart(PlotextPlot):
         self._labels = labels
         self._values = values
         self._range_label = range_label
-        self._budget = budget
-        self._total = values[-1] if values else 0.0
-        self._draw()
         self.refresh()
 
-    def on_mount(self) -> None:
+    def render(self):
+        # Recompute ticks at the current width, including after a terminal resize.
         self._draw()
+        return super().render()
 
     def _draw(self) -> None:
         plt = self.plt
         plt.clear_figure()
+        plt.frame(False)
         if not self._values:
-            plt.title("No data")
+            plt.title("No usage data for this range")
+            plt.xticks([], [])
+            plt.yticks([], [])
             return
 
+        theme = self.app.theme_variables
+        line_color = Color.parse(theme["accent"]).rgb
+        grid_color = Color.parse(theme["surface"]).blend(
+            Color.parse(theme["foreground"]), 0.15
+        ).rgb
+
+        # Use a zero baseline and rounded ticks, with room above the latest value.
+        target = max(max(self._values) * 1.08, 1.0)
+        magnitude = 10 ** math.floor(math.log10(target / 4))
+        step = next(s * magnitude for s in (1, 2, 2.5, 5, 10)
+                    if s * magnitude >= target / 4)
+        upper = math.ceil(target / step) * step
+        y_ticks = [i * step for i in range(round(upper / step) + 1)]
+        plt.ylim(0, upper)
+        plt.yticks(y_ticks, [self._credit_tick(value) for value in y_ticks])
+        for value in y_ticks[1:]:
+            plt.hline(value, color=grid_color)
+
         xs = list(range(len(self._values)))
-        plt.plot(xs, self._values, color="cyan", label="Credits used")
+        plt.xlim(-0.5, max(len(xs) - 0.5, 0.5))
+        plt.plot(xs, self._values, color=line_color, marker="braille")
+        plt.scatter([xs[-1]], [self._values[-1]], color=line_color, marker="braille")
+        plt.title(f"{self._range_label} · Cumulative credits")
 
-        pct = (self._total / self._budget * 100) if self._budget else 0
-        plt.title(
-            f"{self._range_label}  —  {self._total:,.1f} of {self._budget:,.0f} AI credits used ({pct:.1f}%)"
-        )
+        # Select from actual labels: hour/week series deliberately contain blanks.
+        candidates = [i for i, label in enumerate(self._labels) if label]
+        if candidates:
+            label_width = max(len(self._labels[i]) for i in candidates)
+            available = max(1, self.size.width - 12)
+            count = min(len(candidates), max(2, available // (label_width + 4)))
+            if count > 1:
+                tick_xs = [
+                    candidates[round(i * (len(candidates) - 1) / (count - 1))]
+                    for i in range(count)
+                ]
+            else:
+                tick_xs = candidates
+        else:
+            tick_xs = []
+        plt.xticks(tick_xs, [self._labels[i] for i in tick_xs])
 
-        # Show only a sparse set of x-tick labels to avoid overlap
-        tick_step = max(1, len(self._labels) // 12)
-        tick_xs = list(range(0, len(self._labels), tick_step))
-        tick_labels = [self._labels[i] for i in tick_xs]
-        plt.xticks(tick_xs, tick_labels)
+    @staticmethod
+    def _credit_tick(value: float) -> str:
+        if value >= 1_000_000:
+            return f"{value / 1_000_000:g}M"
+        if value >= 1_000:
+            return f"{value / 1_000:g}k"
+        return f"{value:g}"
 
 
 class ModelTable(DataTable):

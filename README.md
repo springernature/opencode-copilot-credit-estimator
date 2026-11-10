@@ -115,7 +115,7 @@ The app opens on the **This month** tab by default. Tabs are selectable with `1`
 
 Each tab shows:
 - A **usage summary** — credits used, total budget, and percentage used — docked below the tabs. This is the highest-priority metric and stays visible at every terminal size.
-- A **cumulative line chart** of AI credits consumed over time. The Y axis scales automatically as usage grows.
+- A **cumulative line chart** of AI credits consumed over time, with a theme-matched line and subtle horizontal gridlines. The Y axis starts at zero and scales automatically as usage grows. Time labels adapt to the terminal width.
 - A **per-model breakdown table** with requests, token counts (input, output, cache read/write), estimated credits, percentage of credits used, and percentage of monthly budget consumed.
 - A **status bar** showing last-updated time, refresh interval, and quit hint.
 
@@ -162,4 +162,3 @@ Released under the [MIT License](LICENSE).
 ## Maintenance & support
 
 This project is maintained by Springer Nature on a best-effort basis. Bug reports and pull requests are welcome via [GitHub Issues](https://github.com/springernature/opencode-copilot-credit-estimator/issues). There is no guaranteed response time or SLA.
-
